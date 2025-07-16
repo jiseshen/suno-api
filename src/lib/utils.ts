@@ -1,5 +1,7 @@
 import pino from "pino";
 import { Page } from "rebrowser-playwright-core";
+import path from "path";
+import fs from "fs";
 
 const logger = pino();
 
@@ -115,4 +117,17 @@ export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
+const COOKIE_PATH = path.join(process.cwd(), '.cookies.json');
+
+
+export function saveCookies(cookies: Record<string, string | undefined>) {
+  fs.writeFileSync(COOKIE_PATH, JSON.stringify(cookies, null, 2), 'utf-8');
+}
+
+export function loadCookies(): Record<string, string | undefined> | null {
+  if (!fs.existsSync(COOKIE_PATH)) return null;
+  const content = fs.readFileSync(COOKIE_PATH, 'utf-8');
+  return JSON.parse(content);
 }

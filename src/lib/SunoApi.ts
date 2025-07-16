@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import UserAgent from 'user-agents';
 import pino from 'pino';
 import yn from 'yn';
-import { isPage, sleep, waitForRequests } from '@/lib/utils';
+import { isPage, sleep, waitForRequests, saveCookies, loadCookies } from '@/lib/utils';
 import * as cookie from 'cookie';
 import { randomUUID } from 'node:crypto';
 import { Solver } from '@2captcha/captcha-solver';
@@ -70,7 +70,8 @@ interface PersonaResponse {
 class SunoApi {
   private static BASE_URL: string = 'https://studio-api.prod.suno.com';
   private static CLERK_BASE_URL: string = 'https://clerk.suno.com';
-  private static CLERK_VERSION = '5.15.0';
+  private static CLERK_API_VERSION = '2025-04-10';
+  private static CLERK_JS_VERSION = '5.69.2';
 
   private readonly client: AxiosInstance;
   private sid?: string;
@@ -84,7 +85,8 @@ class SunoApi {
 
   constructor(cookies: string) {
     this.userAgent = new UserAgent(/Macintosh/).random().toString(); // Usually Mac systems get less amount of CAPTCHAs
-    this.cookies = cookie.parse(cookies);
+    const saved = loadCookies();
+    this.cookies = saved || cookie.parse(cookies);
     this.deviceId = this.cookies.ajs_anonymous_id || randomUUID();
     this.client = axios.create({
       withCredentials: true,
@@ -115,6 +117,7 @@ class SunoApi {
         for (const [key, value] of Object.entries(newCookies)) {
           this.cookies[key] = value;
         }
+        saveCookies(this.cookies);
       }
       return resp;
     })
@@ -152,7 +155,7 @@ class SunoApi {
   private async getAuthToken() {
     logger.info('Getting the session ID');
     // URL to get session ID
-    const getSessionUrl = `${SunoApi.CLERK_BASE_URL}/v1/client?_is_native=true&_clerk_js_version=${SunoApi.CLERK_VERSION}`;
+    const getSessionUrl = `${SunoApi.CLERK_BASE_URL}/v1/client?_is_native=true&__clerk_api_version=${SunoApi.CLERK_API_VERSION}&_clerk_js_version=${SunoApi.CLERK_JS_VERSION}`;
     // Get session ID
     const sessionResponse = await this.client.get(getSessionUrl, {
       headers: { Authorization: this.cookies.__client }
@@ -175,7 +178,7 @@ class SunoApi {
       throw new Error('Session ID is not set. Cannot renew token.');
     }
     // URL to renew session token
-    const renewUrl = `${SunoApi.CLERK_BASE_URL}/v1/client/sessions/${this.sid}/tokens?_is_native=true&_clerk_js_version=${SunoApi.CLERK_VERSION}`;
+    const renewUrl = `${SunoApi.CLERK_BASE_URL}/v1/client/sessions/${this.sid}/tokens?_is_native=true&__clerk_api_version=${SunoApi.CLERK_API_VERSION}&_clerk_js_version=${SunoApi.CLERK_JS_VERSION}`;
     // Renew session token
     logger.info('KeepAlive...\n');
     const renewResponse = await this.client.post(renewUrl, {}, {
@@ -315,6 +318,7 @@ class SunoApi {
 
     logger.info('Waiting for Suno interface to load');
     // await page.locator('.react-aria-GridList').waitFor({ timeout: 60000 });
+    
     await page.waitForResponse('**/api/project/**\\?**', { timeout: 60000 }); // wait for song list API call
 
     if (this.ghostCursorEnabled)
@@ -412,7 +416,7 @@ class SunoApi {
       throw e;
     });
     return (new Promise((resolve, reject) => {
-      page.route('**/api/generate/v2/**', async (route: any) => {
+      page.route('**/api/generate/v2-web/**', async (route: any) => {
         try {
           logger.info('hCaptcha token received. Closing browser');
           route.abort();
@@ -433,7 +437,7 @@ class SunoApi {
    */
   private async getTurnstile() {
     return this.client.post(
-      `https://clerk.suno.com/v1/client?__clerk_api_version=2021-02-05&_clerk_js_version=${SunoApi.CLERK_VERSION}&_method=PATCH`,
+      `https://clerk.suno.com/v1/client?_is_native=true&__clerk_api_version=${SunoApi.CLERK_API_VERSION}&_clerk_js_version=${SunoApi.CLERK_JS_VERSION}&_method=PATCH`,
       { captcha_error: '300030,300030,300030' },
       { headers: { 'content-type': 'application/x-www-form-urlencoded' } });
   }
@@ -505,7 +509,7 @@ class SunoApi {
   public async custom_generate(
     prompt: string,
     tags: string,
-    title: string,
+    title: string = "",
     make_instrumental: boolean = false,
     model?: string,
     wait_audio: boolean = false,
@@ -594,7 +598,7 @@ class SunoApi {
         )
     );
     const response = await this.client.post(
-      `${SunoApi.BASE_URL}/api/generate/v2/`,
+      `${SunoApi.BASE_URL}/api/generate/v2-web/`,
       payload,
       {
         timeout: 10000 // 10 seconds timeout
