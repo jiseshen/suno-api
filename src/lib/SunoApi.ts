@@ -71,7 +71,7 @@ class SunoApi {
   private static BASE_URL: string = 'https://studio-api.prod.suno.com';
   private static CLERK_BASE_URL: string = 'https://clerk.suno.com';
   private static CLERK_API_VERSION = '2025-04-10';
-  private static CLERK_JS_VERSION = '5.69.2';
+  private static CLERK_JS_VERSION = '5.73.2';
 
   private readonly client: AxiosInstance;
   private sid?: string;
@@ -319,7 +319,7 @@ class SunoApi {
     logger.info('Waiting for Suno interface to load');
     // await page.locator('.react-aria-GridList').waitFor({ timeout: 60000 });
     
-    await page.waitForResponse('**/api/project/**\\?**', { timeout: 60000 }); // wait for song list API call
+    await page.waitForResponse('**/v1/rgstr**', { timeout: 60000 }); // wait for song list API call
 
     if (this.ghostCursorEnabled)
       this.cursor = await createCursor(page);
@@ -329,13 +329,6 @@ class SunoApi {
       await page.getByLabel('Close').click({ timeout: 2000 }); // close all popups
       // await this.click(page, { x: 318, y: 13 });
     } catch(e) {}
-
-    const textarea = page.locator('.custom-textarea');
-    await this.click(textarea);
-    await textarea.pressSequentially('Lorem ipsum', { delay: 80 });
-
-    const button = page.locator('button[aria-label="Create"]').locator('div.flex');
-    this.click(button);
 
     const controller = new AbortController();
     new Promise<void>(async (resolve, reject) => {
@@ -398,10 +391,7 @@ class SunoApi {
             };
           }
           this.click(frame.locator('.button-submit')).catch(e => {
-            if (e.message.includes('viewport')) // when hCaptcha window has been closed due to inactivity,
-              this.click(button); // click the Create button again to trigger the CAPTCHA
-            else
-              throw e;
+            throw e;
           });
         }
       } catch(e: any) {
